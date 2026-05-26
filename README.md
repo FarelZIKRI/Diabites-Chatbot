@@ -1,3 +1,13 @@
+---
+title: DiaBites Chatbot Indonesia
+emoji: 🩺
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # DiaBites Chatbot AI
 
 Fitur Chatbot AI untuk aplikasi **DiaBites** — PWA yang membantu penyandang diabetes mengevaluasi kandungan gizi produk kemasan. Chatbot ini menggunakan pipeline cerdas dua lapis (Dual-Layer Hybrid Pipeline) yang dioptimalkan khusus untuk efisiensi CPU dan memori rendah (RAM-friendly):
