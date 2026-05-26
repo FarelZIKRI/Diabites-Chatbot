@@ -11,7 +11,7 @@ os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
 # 2. Import transformers and load tokenizer early while RAM is completely free
 print("[..] Loading IndoBERT Tokenizer early for memory safety...")
-from transformers import BertTokenizer, TFBertModel
+from transformers import BertTokenizer
 try:
     from transformers import BertTokenizerFast
     GLOBAL_TOKENIZER = BertTokenizerFast.from_pretrained("indobenchmark/indobert-base-p2")
@@ -26,6 +26,7 @@ gc.collect()
 # 3. Now import TensorFlow and Keras, which will initialize with the 1-thread limit
 import tensorflow as tf
 import tf_keras as keras
+from transformers import TFBertModel
 
 # Explicitly configure TensorFlow C++ and Keras session limits
 tf.config.threading.set_intra_op_parallelism_threads(1)
