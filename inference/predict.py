@@ -9,9 +9,19 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
-# 2. Import transformers and load tokenizer early while RAM is completely free
+# 2. Now import TensorFlow and Keras first so transformers can detect the backend
+import tensorflow as tf
+import tf_keras as keras
+
+# Explicitly configure TensorFlow C++ and Keras session limits
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
+keras.backend.clear_session()
+gc.collect()
+
+# 3. Import transformers and load tokenizer
 print("[..] Loading IndoBERT Tokenizer early for memory safety...")
-from transformers import BertTokenizer
+from transformers import BertTokenizer, TFBertModel
 try:
     from transformers import BertTokenizerFast
     GLOBAL_TOKENIZER = BertTokenizerFast.from_pretrained("indobenchmark/indobert-base-p2")
@@ -21,17 +31,6 @@ except Exception:
     print("[OK] Standard BertTokenizer loaded.")
 
 # Trigger GC to clean up any temporary vocabulary parsing objects
-gc.collect()
-
-# 3. Now import TensorFlow and Keras, which will initialize with the 1-thread limit
-import tensorflow as tf
-import tf_keras as keras
-from transformers import TFBertModel
-
-# Explicitly configure TensorFlow C++ and Keras session limits
-tf.config.threading.set_intra_op_parallelism_threads(1)
-tf.config.threading.set_inter_op_parallelism_threads(1)
-keras.backend.clear_session()
 gc.collect()
 
 # Set paths
