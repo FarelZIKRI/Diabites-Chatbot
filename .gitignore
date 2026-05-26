@@ -1,0 +1,41 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model files (hanya model penuh .keras yang besar yang di-ignore)
+model/saved_model/*.keras
+
+# Logs
+logs/tensorboard/
+logs/*.png
+
+# Dokumentasi Internal
+PRD.md
+
+
