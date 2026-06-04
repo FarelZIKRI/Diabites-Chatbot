@@ -102,7 +102,7 @@ PORT=your_port_configuration
 
 ---
 
-## Tautan Model ML (Machine Learning Model)
+## Model ML (Machine Learning Model)
 
 Proyek ini menggunakan dua bagian model Machine Learning:
 
