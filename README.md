@@ -84,18 +84,18 @@ cp .env.example .env
 Buka file `.env` tersebut dan sesuaikan konfigurasinya:
 
 ```ini
-# Groq API Key untuk Generative Fallback (LLaMA-3)
+# Groq API Key untuk Generative Fallback
 GROQ_API_KEY=your_groq_api_key_here
 
 # Model Groq yang digunakan
-GROQ_MODEL=llama-3.1-8b-instant
+GROQ_MODEL=your_generative_model
 
 # Batas minimum klasifikasi
-CONFIDENCE_THRESHOLD=0.85
+CONFIDENCE_THRESHOLD=your_treshold
 
 # Konfigurasi Host dan Port Server API FastAPI
-HOST=127.0.0.1
-PORT=8000
+HOST=your_host_configuration
+PORT=your_port_configuration
 ```
 
 > **Penting**: Jika API Key tidak dikonfigurasi, sistem RAG Layer 2 tidak akan aktif dan akan menggunakan pesan kegagalan (_fallback error_).
