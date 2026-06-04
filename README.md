@@ -1,123 +1,196 @@
----
-title: DiaBites Chatbot Indonesia
-emoji: 🩺
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_port: 7860
-pinned: false
----
+# DiaBites Chatbot API - Hybrid Chatbot Diabetes & Gizi
 
-# DiaBites Chatbot AI
-
-Fitur Chatbot AI untuk aplikasi **DiaBites** — PWA yang membantu penyandang diabetes mengevaluasi kandungan gizi produk kemasan. Chatbot ini menggunakan pipeline cerdas dua lapis (Dual-Layer Hybrid Pipeline) yang dioptimalkan khusus untuk efisiensi CPU dan memori rendah (RAM-friendly):
-
-- **Layer 1 — IndoBERT Classifier + Cosine Similarity Lokal (Local Search):** Klasifikasi intent dari kueri pengguna menggunakan model Dense Classifier mandiri di atas representasi IndoBERT (`pooler_output`). Jika confidence skor klasifikasi intent $\ge$ `CONFIDENCE_THRESHOLD` (default: `0.85`), kecocokan dicari menggunakan _Cosine Similarity_ lokal pada intent terpilih untuk mengambil jawaban paling relevan dari dataset.
-- **Layer 2 — Cosine Similarity Global + Groq API LLaMA 3 (Generative Fallback RAG):** Aktif secara otomatis jika confidence skor intent kurang dari threshold. Model melakukan pencarian kemiripan kosinus secara global di seluruh dataset untuk mengekstrak 4 konteks terdekat, lalu mengirimkannya sebagai basis pengetahuan (RAG) ke Groq API (`llama-3.1-8b-instant`) untuk merumuskan respons yang dinamis, akurat, dan natural.
+DiaBites Chatbot API adalah asisten virtual pintar berbasis kecerdasan buatan (AI) yang dirancang untuk memberikan edukasi seputar penyakit diabetes, pola makan sehat, gizi, dan gaya hidup sehat di Indonesia. Chatbot ini dibangun dengan pendekatan _Hybrid_ yang menggabungkan klasifikasi intent berbasis Deep Learning (NLP) dan pencarian kesamaan semantik (_semantic search_) lokal/global dengan model generatif Large Language Model (LLM) sebagai sistem cadangan (_generative fallback_).
 
 ---
 
-## Struktur Direktori Proyek
+## Deskripsi Singkat Proyek & Arsitektur
 
-```
-diabites-chatbot/
-├── data/
-│   ├── diabites_chatbot_dataset.csv     # Dataset kueri intent & respons DiaBites (1.310 baris, 41 kelas)
-│   └── processed/
-│       ├── label_encoder.pkl            # Objek encoder kategori intent (41 kelas)
-│       ├── processed_data.npz           # Tokenized input_ids & attention_mask hasil preprocessing
-│       └── pattern_embeddings.npy       # Precomputed pooler_output embeddings (1310x768)
-├── model/
-│   ├── train.py                         # Skrip latih mandiri untuk Dense classification head
-│   ├── custom_callbacks.py              # Logger kustom untuk memantau confidence score saat training
-│   ├── evaluate.py                      # Skrip pengujian akurasi model & laporan klasifikasi (F1-score)
-│   └── saved_model/
-│       ├── indobert_chatbot_weights.h5  # Bobot latih model Dense head Keras 2 kompatibel (Ringan: ~2.1 MB)
-│       └── indobert_chatbot.keras       # Model penuh ter-stitch (Stitched) dengan IndoBERT (Opsional: ~500 MB)
-├── inference/
-│   ├── predict.py                       # Pipeline inferensi klasifikasi intent hemat memori & OOM-free
-│   ├── embedding_utils.py               # Fungsi utilitas Cosine Similarity lokal & global
-│   └── response_handler.py              # Handler pipeline hybrid Dual-Layer (Layer 1 -> Layer 2 RAG)
-├── api/
-│   ├── main.py                          # REST API Entrypoint utama menggunakan FastAPI
-│   ├── routes/
-│   │   └── chat.py                      # Router endpoint API /chat
-│   └── utils/
-│       └── generative_fallback.py       # Handler komunikasi eksternal ke Groq API RAG Fallback
-├── notebooks/
-│   ├── 01_EDA_preprocessing.ipynb       # Notebook pembersihan data, tokenisasi, & ekstraksi embeddings
-│   └── 02_training_evaluation.ipynb     # Notebook alternatif training & evaluasi interaktif
-├── logs/
-│   ├── tensorboard/                     # Log training Tensorboard
-│   └── training_curves.png              # Grafik performa akurasi & loss training
-├── .env.example                         # Contoh file konfigurasi environment
-├── .gitignore                           # Konfigurasi pengecualian unggahan Git (termasuk .env & weights besar)
-├── requirements.txt                     # Daftar pustaka dependencies proyek
-└── README.md                            # Dokumentasi teknis proyek
+Sistem ini menerapkan **Dual-Layer Pipeline** untuk memproses kueri pengguna secara optimal:
+
+```mermaid
+graph TD
+    A[Kueri Pengguna] --> B[IndoBERT Classifier - Layer 1]
+    B --> C{Confidence >= Threshold 0.85?}
+    C -- Ya --> D[Cosine Similarity Lokal]
+    D --> E[Ambil Respons dari Database]
+    E --> Output[Kembalikan Jawaban]
+    C -- Tidak --> F[Cosine Similarity Global - Layer 2]
+    F --> G[Ambil 4 Konteks Terdekat]
+    G --> H[Groq RAG Fallback via LLaMA-3]
+    H --> Output
 ```
 
+1. **Layer 1: Klasifikasi Intent & Cosine Similarity Lokal**
+   - Kueri pengguna diproses menggunakan model **IndoBERT** (`indobenchmark/indobert-base-p2`) untuk memprediksi intent (tag) pertanyaan dengan output tingkat kepercayaan (_confidence score_).
+   - Jika _confidence score_ $\ge$ **Threshold** (default: `0.85`):
+     - Sistem melakukan pencarian **Cosine Similarity Lokal** antara embedding kueri pengguna dengan embedding pola pertanyaan (_patterns_) yang terasosiasi dengan intent tersebut di database.
+     - Respons yang paling relevan secara semantis akan dikembalikan kepada pengguna.
+2. **Layer 2: Cosine Similarity Global & Generative Fallback (RAG)**
+   - Jika _confidence score_ < **Threshold** (kueri bersifat umum, typo parah, atau tidak masuk klasifikasi):
+     - Sistem melakukan pencarian **Cosine Similarity Global** di seluruh dataset untuk mengekstrak 4 pasang pola dan respons paling relevan secara semantik sebagai konteks.
+     - Konteks ini disuntikkan ke dalam sistem **Retrieval-Augmented Generation (RAG)** menggunakan model LLM **LLaMA-3.1-8b-instant**.
+     - Model generatif akan menyusun jawaban yang santun, akurat, dan medis-aman berdasarkan informasi relevan dari database DiaBites.
+
 ---
 
-## Optimalisasi Memori Lokal (OOM & MemoryError Prevention)
+## Petunjuk Setup Environment
 
-Untuk memastikan kelancaran eksekusi pada komputer CPU lokal atau sistem dengan RAM terbatas, proyek ini menerapkan strategi **Memory-Defensive**:
+Ikuti langkah-langkah di bawah ini untuk menyiapkan lingkungan kerja di komputer lokal Anda:
 
-1. **Capping Threads**: Pembatasan thread internal TensorFlow CPU diatur ketat menjadi `1` thread menggunakan variabel environment (`OMP_NUM_THREADS="1"`, dll.) untuk mencegah membengkaknya memori akibat thread-pools bawaan.
-2. **Early Tokenizer Loading**: Tokenizer dimuat paling awal saat kondisi memori RAM bersih sebelum TensorFlow dimpor untuk mencegah kegagalan alokasi memori kamus kosakata (_vocabulary parsing_).
-3. **Fast Tokenizer Fallback**: Mendukung pemuatan otomatis `BertTokenizerFast` berbasis Rust yang sangat hemat memori dan cepat.
-4. **Lightweight Load Weights**: Modul evaluasi dan inferensi hanya memuat bobot Dense klasifikasi (`indobert_chatbot_weights.h5` - 2.1 MB) alih-alih model penuh (500 MB), menghemat penggunaan RAM lebih dari $80\%$.
+### 1. Prasyarat (Prerequisites)
 
----
+Pastikan komputer Anda sudah terpasang:
 
-## Urutan Menjalankan Pipeline (Lokal)
+- **Python 3.8 - 3.11** (Direkomendasikan Python 3.10)
+- Koneksi internet aktif (untuk mengunduh model IndoBERT saat inisialisasi pertama kali)
 
-### **Langkah 1: Eksplorasi Data & Pra-pemrosesan**
-
-Jalankan file pertama untuk memproses dataset mentah menjadi representasi token.
-
-- **File**: `notebooks/01_EDA_preprocessing.ipynb`
-- **Hasil**: Meng-encode intent (`label_encoder.pkl`), menghasilkan token data (`processed_data.npz`), dan mengekstrak `pooler_output` embedding kalimat dari IndoBERT (`pattern_embeddings.npy`).
-
-### **Langkah 2: Pelatihan Model (Training)**
-
-Latih Dense Head Classifier di atas embedding yang telah di-pra-komputasi.
-
-- **File**: `model/train.py` (atau alternatif interaktif di `notebooks/02_training_evaluation.ipynb`)
-- **Hasil**: Melatih klasifikasi intent dengan cepat (hitungan detik) dan menyimpan bobot teruji (`indobert_chatbot_weights.h5`).
-
-### **Langkah 3: Evaluasi Akurasi Model**
-
-Uji performa model di atas data validasi secara objektif.
-
-- **File**: `model/evaluate.py`
-- **Hasil**: Menampilkan akurasi akhir serta tabel laporan klasifikasi komprehensif (_F1-Score_, _Precision_, _Recall_).
-
-### **Langkah 4: Menjalankan Server API FastAPI**
-
-Nyalakan server lokal untuk menerima chat.
-
-- **File**: `api/main.py`
-- **Hasil**: API Server siap melayani kueri di `http://127.0.0.1:8000/`.
-
-## Cara Testing API
-
-Setelah server API aktif, gunakan terminal/Command Prompt baru untuk menguji chat:
+### 2. Klon Repositori
 
 ```bash
-# Uji Health Check Endpoint
-curl http://127.0.0.1:8000/
-
-# Uji Chat Endpoint (Contoh kueri lokal - confidence tinggi)
-curl -X POST http://127.0.0.1:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Apakah edit manual mempengaruhi akurasi rekomendasi"}'
-
-## Tech Stack Utama
-
-- **Model Klasifikasi:** TensorFlow 2.x + tf_keras (Keras Functional API)
-- **Natural Language Processing:** IndoBERT (`indobenchmark/indobert-base-p2`) via HuggingFace Transformers
-- **Web Framework API:** FastAPI + Uvicorn
-- **Generative AI Fallback:** Groq API SDK (Model: `llama-3.1-8b-instant`)
-- **Pencarian Kemiripan:** Cosine Similarity Lokal/Global (NumPy)
-
+git clone https://github.com/FarelZIKRI/Diabites-OCR-CRNN-.git
+cd CHATBOT
 ```
+
+### 3. Buat dan Aktifkan Virtual Environment
+
+- **Windows (Command Prompt / PowerShell)**:
+  ```powershell
+  python -m venv venv
+  .\venv\Scripts\activate
+  ```
+- **macOS / Linux**:
+  ```bash
+  python3 -m venv venv
+  source venv/bin/activate
+  ```
+
+### 4. Instal Dependensi
+
+Pasang semua pustaka (library) yang dibutuhkan dengan perintah berikut:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 5. Konfigurasi Environment Variables (`.env`)
+
+Salin berkas `.env.example` menjadi berkas baru bernama `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Buka file `.env` tersebut dan sesuaikan konfigurasinya:
+
+```ini
+# Groq API Key untuk Generative Fallback (LLaMA-3)
+GROQ_API_KEY=your_groq_api_key_here
+
+# Model Groq yang digunakan
+GROQ_MODEL=llama-3.1-8b-instant
+
+# Batas minimum klasifikasi
+CONFIDENCE_THRESHOLD=0.85
+
+# Konfigurasi Host dan Port Server API FastAPI
+HOST=127.0.0.1
+PORT=8000
+```
+
+> **Penting**: Jika API Key tidak dikonfigurasi, sistem RAG Layer 2 tidak akan aktif dan akan menggunakan pesan kegagalan (_fallback error_).
+
+---
+
+## Tautan Model ML (Machine Learning Model)
+
+Proyek ini menggunakan dua bagian model Machine Learning:
+
+1. **Base Embedding Model**: Menggunakan model encoder **IndoBERT** (`indobenchmark/indobert-base-p2`) yang otomatis diunduh dari Hugging Face Hub saat aplikasi dijalankan pertama kali.
+2. **Intent Classification Head**:
+   - Repositori ini **telah menyertakan** berkas weights pra-latih: [`model/saved_model/indobert_chatbot_weights.h5`](file:///d:/PERKULIAHAN/Dicoding/CHATBOT/model/saved_model/indobert_chatbot_weights.h5) (2.1 MB).
+   - API secara dinamis memuat arsitektur model klasifikasi dan mengaitkan weights tersebut saat _startup_, sehingga Anda tidak perlu melakukan pelatihan ulang (training) untuk menjalankan aplikasi.
+   - Model penuh [`model/saved_model/indobert_chatbot.keras`](file:///d:/PERKULIAHAN/Dicoding/CHATBOT/model/saved_model/indobert_chatbot.keras) berukuran sekitar 500 MB tidak dimasukkan ke dalam Git (`.gitignore`) karena batas ukuran berkas. Model penuh ini dapat dibuat secara otomatis dengan menjalankan skrip pelatihan (lihat bagian di bawah).
+
+---
+
+## Cara Menjalankan Aplikasi
+
+Aplikasi ini menyediakan beberapa mode untuk dijalankan:
+
+### A. Melatih Model Klasifikasi (Opsional)
+
+Jika Anda melakukan modifikasi pada dataset atau ingin melatih ulang klasifikasi head model:
+
+```bash
+python model/train.py
+```
+
+_Proses ini sangat cepat (hanya beberapa detik) karena model menggunakan pre-computed embeddings yang telah dihitung sebelumnya._
+
+### B. Menjalankan Mode Interaktif CLI (Testing Cepat)
+
+Anda dapat melakukan interaksi langsung dengan model asisten chatbot melalui antarmuka konsol/terminal:
+
+```bash
+python inference/predict.py
+```
+
+Ketik pertanyaan Anda di terminal, lalu tekan **Enter**. Ketik `quit` untuk keluar.
+
+### C. Menjalankan API Server Produksi (FastAPI)
+
+Untuk menjalankan web API yang dapat dikoneksikan ke antarmuka aplikasi Android, Web, atau Frontend lainnya:
+
+```bash
+python api/main.py
+```
+
+Server FastAPI akan berjalan di `http://127.0.0.1:8000`. Anda dapat mengakses dokumentasi interaktif Swagger API di [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+---
+
+## 🔌 API Specification & Penggunaan
+
+### 1. Health Check
+
+- **Endpoint**: `GET /`
+- **Deskripsi**: Verifikasi status server dan konfigurasi model yang aktif.
+- **Response Contoh**:
+  ```json
+  {
+    "status": "healthy",
+    "app": "DiaBites Chatbot API",
+    "confidence_threshold": 0.85,
+    "model": "IndoBERT + Cosine Similarity Hybrid",
+    "fallback_model": "llama-3.1-8b-instant"
+  }
+  ```
+
+### 2. Chat Endpoint
+
+- **Endpoint**: `POST /chat`
+- **Body Request (JSON)**:
+  ```json
+  {
+    "message": "Bagaimana cara mencegah diabetes melitus?"
+  }
+  ```
+- **Response Contoh (Layer 1 - Klasifikasi Lokal)**:
+  ```json
+  {
+    "response": "Pencegahan diabetes melitus dapat dilakukan dengan menjaga berat badan ideal, rutin berolahraga minimal 150 menit per minggu, membatasi konsumsi gula dan karbohidrat olahan, serta memperbanyak makan serat.",
+    "intent": "pencegahan_diabetes",
+    "confidence": 0.9824,
+    "source": "classification_local"
+  }
+  ```
+- **Response Contoh (Layer 2 - Generative Fallback RAG)**:
+  ```json
+  {
+    "response": "Berdasarkan informasi yang tersedia, untuk penderita diabetes disarankan membatasi konsumsi nasi putih dan menggantinya dengan karbohidrat kompleks seperti beras merah atau gandum. Selain itu, Anda sebaiknya membatasi makanan tinggi gula, mentega berlebih, serta makanan cepat saji.",
+    "intent": "nutrisi_umum",
+    "confidence": 0.3412,
+    "source": "generative_fallback"
+  }
+  ```
