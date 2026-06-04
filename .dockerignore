@@ -12,4 +12,3 @@ __pycache__/
 .idea/
 logs/
 model/saved_model/*.keras
-PRD.md
