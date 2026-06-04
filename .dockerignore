@@ -1,0 +1,15 @@
+.git
+.env
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.vscode/
+.idea/
+logs/
+model/saved_model/*.keras
+PRD.md
