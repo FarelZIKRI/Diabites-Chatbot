@@ -2,7 +2,7 @@
 
 DiaBites Chatbot API adalah asisten virtual pintar berbasis kecerdasan buatan (AI) yang dirancang untuk memberikan edukasi seputar penyakit diabetes, pola makan sehat, gizi, dan gaya hidup sehat di Indonesia. Chatbot ini dibangun dengan pendekatan _Hybrid_ yang menggabungkan klasifikasi intent berbasis Deep Learning (NLP) dan pencarian kesamaan semantik (_semantic search_) lokal/global dengan model generatif Large Language Model (LLM) sebagai sistem cadangan (_generative fallback_).
 
-Deployment HuggingFace: https://huggingface.co/spaces/fzikri169/diabites-chatbot-indonesia?logs=container
+### Deployment HuggingFace: https://huggingface.co/spaces/fzikri169/diabites-chatbot-indonesia?logs=container
 ---
 
 ## Deskripsi Singkat Proyek & Arsitektur
